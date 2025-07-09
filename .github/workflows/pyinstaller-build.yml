@@ -1,0 +1,67 @@
+name: Build desktop binaries
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write     # 允许创建/修改 Release 与上传资产
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build executable with PyInstaller
+        run: |
+          pyinstaller --noconsole --onefile --name SpeedhuntersScraper app.py
+
+      # macOS 产物默认为 "dist/SpeedhuntersScraper" (无扩展名可直接运行)，
+      # Windows 为 "dist/SpeedhuntersScraper.exe"。
+      # 统一将产物压缩后上传便于下载。
+      - name: Archive artifact
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist/SpeedhuntersScraper.exe -DestinationPath dist/SpeedhuntersScraper-windows.zip
+        shell: pwsh
+      - name: Archive artifact (macOS)
+        if: runner.os == 'macOS'
+        run: zip -j dist/SpeedhuntersScraper-mac.zip dist/SpeedhuntersScraper
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-binary
+          path: |
+            dist/SpeedhuntersScraper-*.zip 
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: dist
+
+      - name: Upload assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*SpeedhuntersScraper-*.zip 

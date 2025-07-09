@@ -1,0 +1,5 @@
+PyQt5
+selenium
+pytest
+pytest-qt
+pytest-mock
